@@ -2077,6 +2077,13 @@ def _export(
 
     from torch._export.verifier import Verifier
 
+    if (
+        isinstance(mod, torch.fx.GraphModule)
+        and hasattr(mod, "meta")
+        and "custom" in mod.meta
+    ):
+        gm.meta.update({"custom": mod.meta["custom"]})
+
     exported_program = ExportedProgram(
         root=gm,
         graph=gm.graph,
