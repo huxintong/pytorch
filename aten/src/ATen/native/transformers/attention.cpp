@@ -19,7 +19,6 @@
 #include <c10/core/DispatchKey.h>
 #include <c10/core/DispatchKeySet.h>
 
-#include <type_traits>
 #include <limits>
 #include <utility>
 
@@ -70,6 +69,8 @@
 #include <ATen/ops/where.h>
 #include <ATen/ops/zeros.h>
 #include <ATen/ops/zeros_like.h>
+#include <ATen/ops/_safe_softmax.h>
+#include <ATen/ops/_safe_softmax_native.h>
 #endif
 
 #include <ATen/native/nested/NestedTensorTransformerFunctions.h>
@@ -609,6 +610,20 @@ bool should_compute_logsumexp(const Tensor& query, const Tensor& key, const Tens
 }
 
 } // namespace
+
+Tensor _safe_softmax(
+    const Tensor& self,
+    const Tensor& mask,
+    int64_t dim,
+    std::optional<ScalarType> dtype) {
+  TORCH_CHECK(self.is_floating_point(), "Expected softmax matrix to be floating point, but got ", self.dtype());
+  TORCH_CHECK(mask.dtype() == at::kBool, "Expected mask to be a boolean tensor, but got ", mask.dtype());
+  const auto attn_mask_float = convert_boolean_attn_mask(mask, self.dtype());
+  TORCH_INTERNAL_ASSERT(attn_mask_float.has_value(), "Expected attn_mask to return a tensor!");
+  const auto out = at::softmax(self + attn_mask_float.value(), dim);
+  const auto scalar_options = at::TensorOptions().dtype(out.dtype()).device(out.device());
+  return at::where(mask.logical_not(), at::scalar_tensor(0.0, scalar_options), out);
+}
 
 // Computes scaled dot product attention on query, key and value tensors, using
 // an optional attention mask if passed, and applying dropout if a probability
