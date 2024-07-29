@@ -17,6 +17,10 @@
 #include <ATen/cuda/EmptyTensor.h>
 #endif
 
+#ifdef USE_XPU
+#include <ATen/xpu/EmptyTensor.h>
+#endif
+
 #include <sstream>
 #include <tuple>
 #include <utility>
@@ -783,6 +787,21 @@ static PyObject* _empty_strided_cuda(PyObject* dummy, PyObject* args) {
   END_HANDLE_TH_ERRORS;
 }
 
+static PyObject* _empty_strided_xpu(PyObject* dummy, PyObject* args) {
+  // at::empty_strided is surprising slow.  This is lower-overhead.
+  HANDLE_TH_ERRORS;
+#ifdef USE_XPU
+  at::SmallVector<int64_t, 8> sizes;
+  at::SmallVector<int64_t, 8> strides;
+  at::ScalarType dtype{at::ScalarType::Undefined};
+  _parse_empty_strided_args(args, sizes, strides, dtype);
+  return THPVariable_Wrap(at::detail::empty_strided_xpu(
+      sizes, strides, dtype, c10::DeviceType::XPU));
+#else
+  TORCH_CHECK(false, "PyTorch compiled without USE_XPU");
+#endif
+  END_HANDLE_TH_ERRORS;
+}
 static PyObject* _reinterpret_tensor(PyObject* dummy, PyObject* args) {
   HANDLE_TH_ERRORS;
   static PythonArgParser parser(
@@ -812,6 +831,7 @@ static PyMethodDef _methods[] = {
     {"dict_version", dict_version, METH_VARARGS, nullptr},
     {"_empty_strided_cpu", _empty_strided_cpu, METH_VARARGS, nullptr},
     {"_empty_strided_cuda", _empty_strided_cuda, METH_VARARGS, nullptr},
+    {"_empty_strided_xpu", _empty_strided_xpu, METH_VARARGS, nullptr},
     {"_reinterpret_tensor", _reinterpret_tensor, METH_VARARGS, nullptr},
     {nullptr, nullptr, 0, nullptr}};
 
